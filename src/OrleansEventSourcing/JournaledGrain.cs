@@ -1,29 +1,27 @@
-using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-
 
 namespace Orleans.EventSourcing
 {
     /// <summary>
     /// The base class for all grain classes that have event-sourced state.
     /// </summary>
-    public class JournaledGrain<TGrainState> : Grain<TGrainState>
-        where TGrainState : JournaledGrainState<TGrainState>
+    public abstract class JournaledGrain<TGrainState> : Grain<TGrainState>
+        where TGrainState : JournaledGrainState
     {
-        /// <summary>
-        /// Helper method for raising events, applying them to TGrainState and optionally committing to storage
-        /// </summary>
-        /// <param name="event">Event to raise</param>
-        /// <param name="commit">Whether or not the event needs to be immediately committed to storage</param>
-        /// <returns></returns>
-        protected Task RaiseStateEvent<TEvent>(TEvent @event, bool commit = true)
-            where TEvent : class
+        protected async Task WriteEvent(IJournaledGrainEvent<TGrainState> @event)
         {
-            if (@event == null) throw new ArgumentNullException("event");
+            //set last state?
+            ((IJournaledGrainState)this.State).LastEvent = @event;
 
-            State.AddEvent(@event);
-            return commit ? WriteStateAsync() : TaskDone.Done;
+            await this.WriteStateAsync();
+            await ApplyEvent(@event);
+        }
+
+        internal Task ApplyEvent(IJournaledGrainEvent<TGrainState> @event)
+        {
+            @event.Apply(this.State);
+
+            return TaskDone.Done;
         }
     }
 }

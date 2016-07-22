@@ -1,18 +1,18 @@
-using System;
-using System.Threading.Tasks;
 using Orleans;
 using Orleans.EventSourcing;
 using Orleans.Providers;
+using System;
+using System.Threading.Tasks;
 using TestGrainInterfaces;
 
 namespace TestGrains
 {
-    [StorageProvider(ProviderName = "MemoryStore")]
+    [StorageProvider(ProviderName = "EventStoreStorageProvider")]
     public class JournaledPersonGrain : JournaledGrain<PersonState>, IJournaledPersonGrain
     {
         public Task RegisterBirth(PersonAttributes props)
         {
-            return RaiseStateEvent(new PersonRegistered(props.FirstName, props.LastName, props.Gender));
+            return WriteEvent(new PersonRegistered(props.FirstName, props.LastName, props.Gender));
         }
 
         public async Task Marry(IJournaledPersonGrain spouse)
@@ -22,30 +22,24 @@ namespace TestGrains
 
             var spouseData = await spouse.GetPersonalAttributes();
 
-            await RaiseStateEvent(
-                new PersonMarried(spouse.GetPrimaryKey(), spouseData.FirstName, spouseData.LastName),
-                commit: false); // We are not storing the first event here
+            await WriteEvent(
+                new PersonMarried(spouse.GetPrimaryKey(), spouseData.FirstName, spouseData.LastName)); // We are not storing the first event here
 
             if (State.LastName != spouseData.LastName)
             {
-                await RaiseStateEvent(
-                    new PersonLastNameChanged(spouseData.LastName),
-                    commit: false);
+                await WriteEvent(
+                    new PersonLastNameChanged(spouseData.LastName));
             }
-
-            // We might need a different, more explicit, persstence API for ES. 
-            // Reusing the current API for now.
-            await this.WriteStateAsync();
         }
-        
+
         public Task<PersonAttributes> GetPersonalAttributes()
         {
             return Task.FromResult(new PersonAttributes
-                {
-                    FirstName = State.FirstName,
-                    LastName = State.LastName,
-                    Gender = State.Gender
-                });
+            {
+                FirstName = State.FirstName,
+                LastName = State.LastName,
+                Gender = State.Gender
+            });
         }
     }
 }
