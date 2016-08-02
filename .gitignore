@@ -197,3 +197,4 @@ FakesAssemblies/
 .vs/
 **/project.lock.json
 src/SetupTestScriptOutput.txt
+OrleansEventSourcingNugetBuild/OrleansEventSourcing.dll

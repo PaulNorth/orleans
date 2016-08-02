@@ -20,9 +20,6 @@ namespace Orleans.EventSourcing
     {
         private IEventStoreConnection Connection;
 
-        private const int ReadPageSize = 5;
-        private const int SnapshotInterval = 10;
-
         private static readonly JsonSerializerSettings SerializerSettings = new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.None };
 
         public string Name { get; private set; }
@@ -66,6 +63,9 @@ namespace Orleans.EventSourcing
             var snapshotStream = this.GetSnapshotStreamName(grainType, grainReference);
             Type stateType = grainState.GetType().GetGenericArguments()[0];
 
+            var intervalAttribute = (JournaledGrainSnapshotIntervalAttribute)grainState.State.GetType().GetCustomAttributes(typeof(JournaledGrainSnapshotIntervalAttribute), true).FirstOrDefault();
+            if (intervalAttribute == null) intervalAttribute = new JournaledGrainSnapshotIntervalAttribute();
+
             StreamEventsSlice latestSnapshot;
             latestSnapshot = await this.Connection.ReadStreamEventsBackwardAsync(snapshotStream, StreamPosition.End, 1, false);
 
@@ -85,7 +85,7 @@ namespace Orleans.EventSourcing
 
             do
             {
-                var sliceCount = sliceStart + ReadPageSize;
+                var sliceCount = sliceStart + intervalAttribute.Interval;
 
                 currentSlice = await this.Connection.ReadStreamEventsForwardAsync(stream, sliceStart, sliceCount, false);
 
@@ -108,9 +108,12 @@ namespace Orleans.EventSourcing
             grainState.ETag = currentSlice.LastEventNumber.ToString();
         }
 
-        public async Task WriteStateAsync(string grainType, GrainReference grainReference, Orleans.IGrainState grainState)
+        public async Task WriteStateAsync(string grainType, GrainReference grainReference, IGrainState grainState)
         {
             var stream = this.GetStreamName(grainType, grainReference);
+
+            var intervalAttribute = (JournaledGrainSnapshotIntervalAttribute)grainState.State.GetType().GetCustomAttributes(typeof(JournaledGrainSnapshotIntervalAttribute), true).FirstOrDefault();
+            if (intervalAttribute == null) intervalAttribute = new JournaledGrainSnapshotIntervalAttribute();
 
             var newEvent = ((IJournaledGrainState)grainState.State).LastEvent;
             if (newEvent == null) return;
@@ -122,7 +125,7 @@ namespace Orleans.EventSourcing
             ((IJournaledGrainState)grainState.State).LastEvent = null;
 
             //If the SnapshotInterval has been reached...
-            if (SnapshotInterval != 0 && grainState.ETag != null && Convert.ToInt32(grainState.ETag) % SnapshotInterval == 0)
+            if (intervalAttribute.Interval != 0 && grainState.ETag != null && Convert.ToInt32(grainState.ETag) + 1 >= intervalAttribute.Interval && (Convert.ToInt32(grainState.ETag) + 1) % intervalAttribute.Interval == 0)
             {
                 var snapshotStream = this.GetSnapshotStreamName(grainType, grainReference);
                 var snapshotToSave = ToEventData(new JournaledGrainSnapshotEvent { LastEventId = Convert.ToInt32(grainState.ETag), State = grainState.State });
