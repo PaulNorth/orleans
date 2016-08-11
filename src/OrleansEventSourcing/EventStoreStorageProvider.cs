@@ -31,14 +31,14 @@ namespace Orleans.EventSourcing
             this.Log = providerRuntime.GetLogger(this.GetType().FullName);
 
             // Create EventStore connection
-            var username = config.Properties.ContainsKey("Username") ? config.Properties["Username"] : "admin";
-            var password = config.Properties.ContainsKey("Password") ? config.Properties["Password"] : "changeit";
+            var username = config.Properties["Username"];
+            var password = config.Properties["Password"];
 
             var settings = ConnectionSettings.Create()
-                //.KeepReconnecting().KeepRetrying()
                 .SetDefaultUserCredentials(new UserCredentials(username, password))
                 .FailOnNoServerResponse()
                 .SetHeartbeatTimeout(TimeSpan.FromMinutes(1))
+                .KeepReconnecting().KeepRetrying()
                 .UseConsoleLogger();
 
             // Connection string format: <hostName>:<port>
